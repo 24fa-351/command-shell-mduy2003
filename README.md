@@ -11,7 +11,7 @@ xsh# echo My favorite fruit is a $FOO.\
 My favorite fruit is a banana.\
 xsh# unset FOO\
 xsh# echo I'd love to eat a $FOO colored slug.\
-I'd love to eat a  colored slug.\
+I'd love to eat a  colored slug.
 
 (this means that you should scan the command for a $<something> and replace it if found)
 
