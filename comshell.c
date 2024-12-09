@@ -35,9 +35,9 @@ void execute_command(char* command)
     }
 
     int contains_special_symbol = 0;
-    for (int i = 0; i < arg_count; i++) {
-        if (strcmp(args[i], "|") == 0 || strcmp(args[i], "<") == 0
-            || strcmp(args[i], ">") == 0 || strcmp(args[i], "&") == 0) {
+    for (int ix = 0; ix < arg_count; ix++) {
+        if (strcmp(args[ix], "|") == 0 || strcmp(args[ix], "<") == 0
+            || strcmp(args[ix], ">") == 0 || strcmp(args[ix], "&") == 0) {
             contains_special_symbol = 1;
             break;
         }
@@ -74,16 +74,16 @@ int parse_command(char* command, char* args[])
 
 void handle_echo(char* args[], int arg_count)
 {
-    for (int i = 1; i < arg_count; i++) {
-        if (args[i][0] == '$') {
-            char* var = get_environment_variable(args[i] + 1);
+    for (int ix = 1; ix < arg_count; ix++) {
+        if (args[ix][0] == '$') {
+            char* var = get_environment_variable(args[ix] + 1);
             if (var) {
                 printf("%s ", var);
             } else {
                 printf(" ");
             }
         } else {
-            printf("%s ", args[i]);
+            printf("%s ", args[ix]);
         }
     }
     printf("\n");
@@ -98,21 +98,21 @@ void handle_external_command(char* args[], int arg_count)
     char* input_file = NULL;
     char* output_file = NULL;
 
-    for (int i = 0; i < arg_count; i++) {
-        if (strcmp(args[i], "&") == 0) {
+    for (int ix = 0; ix < arg_count; ix++) {
+        if (strcmp(args[ix], "&") == 0) {
             background = 1;
-            args[i] = NULL;
-        } else if (strcmp(args[i], "<") == 0) {
+            args[ix] = NULL;
+        } else if (strcmp(args[ix], "<") == 0) {
             redirect_input = 1;
-            input_file = args[i + 1];
-            args[i] = NULL;
-        } else if (strcmp(args[i], ">") == 0) {
+            input_file = args[ix + 1];
+            args[ix] = NULL;
+        } else if (strcmp(args[ix], ">") == 0) {
             redirect_output = 1;
-            output_file = args[i + 1];
-            args[i] = NULL;
-        } else if (strcmp(args[i], "|") == 0) {
-            pipe_index = i;
-            args[i] = NULL;
+            output_file = args[ix + 1];
+            args[ix] = NULL;
+        } else if (strcmp(args[ix], "|") == 0) {
+            pipe_index = ix;
+            args[ix] = NULL;
         }
     }
 
@@ -130,7 +130,7 @@ void handle_pipe(char* args[], int pipe_index)
 
     int pipefd[2];
     if (pipe(pipefd) == -1) {
-        perror("pipe failed");
+        perror("Pipe failed");
         return;
     }
 
@@ -140,7 +140,7 @@ void handle_pipe(char* args[], int pipe_index)
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
         execvp(args[0], args);
-        perror("execvp failed");
+        perror("Execvp failed");
         exit(EXIT_FAILURE);
     } else if (pid1 > 0) {
         pid_t pid2 = fork();
@@ -149,7 +149,7 @@ void handle_pipe(char* args[], int pipe_index)
             dup2(pipefd[0], STDIN_FILENO);
             close(pipefd[0]);
             execvp(args[pipe_index + 1], &args[pipe_index + 1]);
-            perror("execvp failed");
+            perror("Execvp failed");
             exit(EXIT_FAILURE);
         } else if (pid2 > 0) {
             close(pipefd[0]);
@@ -157,10 +157,10 @@ void handle_pipe(char* args[], int pipe_index)
             waitpid(pid1, NULL, 0);
             waitpid(pid2, NULL, 0);
         } else {
-            perror("fork failed");
+            perror("Fork failed");
         }
     } else {
-        perror("fork failed");
+        perror("Fork failed");
     }
 }
 
@@ -172,7 +172,7 @@ void execute_external_command(char* args[], int background, int redirect_input,
         if (redirect_input) {
             int fd = open(input_file, O_RDONLY);
             if (fd == -1) {
-                perror("open failed");
+                perror("Failed to open input file");
                 exit(EXIT_FAILURE);
             }
             dup2(fd, STDIN_FILENO);
@@ -181,28 +181,28 @@ void execute_external_command(char* args[], int background, int redirect_input,
         if (redirect_output) {
             int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd == -1) {
-                perror("open failed");
+                perror("Failed to open output file");
                 exit(EXIT_FAILURE);
             }
             dup2(fd, STDOUT_FILENO);
             close(fd);
         }
         execvp(args[0], args);
-        perror("execvp failed");
+        perror("Execvp failed");
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
         if (!background) {
             waitpid(pid, NULL, 0);
         }
     } else {
-        perror("fork failed");
+        perror("Fork failed");
     }
 }
 
 void change_directory(char* path)
 {
     if (chdir(path) != 0) {
-        perror("chdir failed");
+        perror("Failed to change directory");
     }
 }
 
@@ -212,7 +212,7 @@ void print_working_directory()
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         printf("%s\n", cwd);
     } else {
-        perror("getcwd failed");
+        perror("Failed to get current working directory");
     }
 }
 
