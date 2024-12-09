@@ -6,12 +6,12 @@ Implement "cd" and "pwd". (directly). cd must take a full or relative path.
 
 Implement the setting, deleting (unsetting) and getting of xsh environment vars:
 
-xsh# set FOO banana__
-xsh# echo My favorite fruit is a $FOO.__
-My favorite fruit is a banana.__
-xsh# unset FOO__
-xsh# echo I'd love to eat a $FOO colored slug.__
-I'd love to eat a  colored slug.__
+xsh# set FOO banana\
+xsh# echo My favorite fruit is a $FOO.\
+My favorite fruit is a banana.\
+xsh# unset FOO\
+xsh# echo I'd love to eat a $FOO colored slug.\
+I'd love to eat a  colored slug.\
 
 (this means that you should scan the command for a $<something> and replace it if found)
 
