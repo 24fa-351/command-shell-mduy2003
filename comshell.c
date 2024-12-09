@@ -29,19 +29,23 @@ void start_shell()
 void execute_command(char* command)
 {
     char* args[MAX_ARG_SIZE];
-    char* token = strtok(command, " ");
-    int arg_count = 0;
-    while (token != NULL) {
-        args[arg_count++] = token;
-        token = strtok(NULL, " ");
-    }
-    args[arg_count] = NULL;
-
+    int arg_count = parse_command(command, args);
     if (arg_count == 0) {
         return;
     }
 
-    if (strcmp(args[0], "cd") == 0) {
+    int contains_special_symbol = 0;
+    for (int i = 0; i < arg_count; i++) {
+        if (strcmp(args[i], "|") == 0 || strcmp(args[i], "<") == 0
+            || strcmp(args[i], ">") == 0 || strcmp(args[i], "&") == 0) {
+            contains_special_symbol = 1;
+            break;
+        }
+    }
+
+    if (contains_special_symbol) {
+        handle_external_command(args, arg_count);
+    } else if (strcmp(args[0], "cd") == 0) {
         change_directory(args[1]);
     } else if (strcmp(args[0], "pwd") == 0) {
         print_working_directory();
@@ -50,44 +54,148 @@ void execute_command(char* command)
     } else if (strcmp(args[0], "unset") == 0) {
         unset_environment_variable(args[1]);
     } else if (strcmp(args[0], "echo") == 0) {
-        for (int i = 1; i < arg_count; i++) {
-            if (args[i][0] == '$') {
-                char* var = get_environment_variable(args[i] + 1);
-                if (var) {
-                    printf("%s ", var);
-                } else {
-                    printf(" ");
-                }
-            } else {
-                printf("%s ", args[i]);
-            }
-        }
-        printf("\n");
+        handle_echo(args, arg_count);
     } else {
-        // Check if the command exists in the PATH
-        char* path_env = getenv("PATH");
-        if (path_env) {
-            char* path = strtok(path_env, ":");
-            while (path != NULL) {
-                char full_path[1024];
-                snprintf(full_path, sizeof(full_path), "%s/%s", path, args[0]);
-                if (access(full_path, X_OK) == 0) {
-                    pid_t pid = fork();
-                    if (pid == 0) {
-                        execv(full_path, args);
-                        perror("execv failed");
-                        exit(EXIT_FAILURE);
-                    } else if (pid > 0) {
-                        wait(NULL);
-                    } else {
-                        perror("fork failed");
-                    }
-                    return;
-                }
-                path = strtok(NULL, ":");
+        handle_external_command(args, arg_count);
+    }
+}
+
+int parse_command(char* command, char* args[])
+{
+    char* token = strtok(command, " ");
+    int arg_count = 0;
+    while (token != NULL) {
+        args[arg_count++] = token;
+        token = strtok(NULL, " ");
+    }
+    args[arg_count] = NULL;
+    return arg_count;
+}
+
+void handle_echo(char* args[], int arg_count)
+{
+    for (int i = 1; i < arg_count; i++) {
+        if (args[i][0] == '$') {
+            char* var = get_environment_variable(args[i] + 1);
+            if (var) {
+                printf("%s ", var);
+            } else {
+                printf(" ");
             }
+        } else {
+            printf("%s ", args[i]);
         }
-        fprintf(stderr, "Command not found: %s\n", args[0]);
+    }
+    printf("\n");
+}
+
+void handle_external_command(char* args[], int arg_count)
+{
+    int background = 0;
+    int redirect_input = 0;
+    int redirect_output = 0;
+    int pipe_index = -1;
+    char* input_file = NULL;
+    char* output_file = NULL;
+
+    for (int i = 0; i < arg_count; i++) {
+        if (strcmp(args[i], "&") == 0) {
+            background = 1;
+            args[i] = NULL;
+        } else if (strcmp(args[i], "<") == 0) {
+            redirect_input = 1;
+            input_file = args[i + 1];
+            args[i] = NULL;
+        } else if (strcmp(args[i], ">") == 0) {
+            redirect_output = 1;
+            output_file = args[i + 1];
+            args[i] = NULL;
+        } else if (strcmp(args[i], "|") == 0) {
+            pipe_index = i;
+            args[i] = NULL;
+        }
+    }
+
+    if (pipe_index != -1) {
+        handle_pipe(args, pipe_index);
+    } else {
+        execute_external_command(args, background, redirect_input, input_file,
+            redirect_output, output_file);
+    }
+}
+
+void handle_pipe(char* args[], int pipe_index)
+{
+    args[pipe_index] = NULL;
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe failed");
+        return;
+    }
+
+    pid_t pid1 = fork();
+    if (pid1 == 0) {
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+        execvp(args[0], args);
+        perror("execvp failed");
+        exit(EXIT_FAILURE);
+    } else if (pid1 > 0) {
+        pid_t pid2 = fork();
+        if (pid2 == 0) {
+            close(pipefd[1]);
+            dup2(pipefd[0], STDIN_FILENO);
+            close(pipefd[0]);
+            execvp(args[pipe_index + 1], &args[pipe_index + 1]);
+            perror("execvp failed");
+            exit(EXIT_FAILURE);
+        } else if (pid2 > 0) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+            waitpid(pid1, NULL, 0);
+            waitpid(pid2, NULL, 0);
+        } else {
+            perror("fork failed");
+        }
+    } else {
+        perror("fork failed");
+    }
+}
+
+void execute_external_command(char* args[], int background, int redirect_input,
+    char* input_file, int redirect_output, char* output_file)
+{
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (redirect_input) {
+            int fd = open(input_file, O_RDONLY);
+            if (fd == -1) {
+                perror("open failed");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+        if (redirect_output) {
+            int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd == -1) {
+                perror("open failed");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
+        execvp(args[0], args);
+        perror("execvp failed");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        if (!background) {
+            waitpid(pid, NULL, 0);
+        }
+    } else {
+        perror("fork failed");
     }
 }
 
