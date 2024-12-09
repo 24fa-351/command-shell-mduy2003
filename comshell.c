@@ -1,5 +1,4 @@
 #include "comshell.h"
-
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,23 +64,37 @@ void execute_command(char* command)
         }
         printf("\n");
     } else {
-        pid_t pid = fork();
-        if (pid == 0) {
-            execvp(args[0], args);
-            perror("Execvp failed");
-            exit(EXIT_FAILURE);
-        } else if (pid > 0) {
-            wait(NULL);
-        } else {
-            perror("Fork failed");
+        // Check if the command exists in the PATH
+        char* path_env = getenv("PATH");
+        if (path_env) {
+            char* path = strtok(path_env, ":");
+            while (path != NULL) {
+                char full_path[1024];
+                snprintf(full_path, sizeof(full_path), "%s/%s", path, args[0]);
+                if (access(full_path, X_OK) == 0) {
+                    pid_t pid = fork();
+                    if (pid == 0) {
+                        execv(full_path, args);
+                        perror("execv failed");
+                        exit(EXIT_FAILURE);
+                    } else if (pid > 0) {
+                        wait(NULL);
+                    } else {
+                        perror("fork failed");
+                    }
+                    return;
+                }
+                path = strtok(NULL, ":");
+            }
         }
+        fprintf(stderr, "Command not found: %s\n", args[0]);
     }
 }
 
 void change_directory(char* path)
 {
     if (chdir(path) != 0) {
-        perror("Couldn't change directory");
+        perror("chdir failed");
     }
 }
 
@@ -91,7 +104,7 @@ void print_working_directory()
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         printf("%s\n", cwd);
     } else {
-        perror("Couldn't get current working directory");
+        perror("getcwd failed");
     }
 }
 
