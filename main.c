@@ -1,8 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "comshell.h"
 
 int main(int argc, char* argv[])
 {
-    printf("Hello, World!\n");
+    start_shell();
     return 0;
 }
